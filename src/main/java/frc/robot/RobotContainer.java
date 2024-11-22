@@ -5,6 +5,7 @@
 package frc.robot;
 
 import edu.wpi.first.math.MathUtil;
+import edu.wpi.first.math.filter.SlewRateLimiter;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
@@ -28,19 +29,26 @@ import frc.robot.subsystems.swervedrive.SwerveSubsystem;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import frc.robot.subsystems.LedSubsystem;
 
 /**
- * This class is where the bulk of the robot should be declared. Since Command-based is a "declarative" paradigm, very
- * little robot logic should actually be handled in the {@link Robot} periodic methods (other than the scheduler calls).
- * Instead, the structure of the robot (including subsystems, commands, and trigger mappings) should be declared here.
+ * This class is where the bulk of the robot should be declared. Since
+ * Command-based is a "declarative" paradigm, very
+ * little robot logic should actually be handled in the {@link Robot} periodic
+ * methods (other than the scheduler calls).
+ * Instead, the structure of the robot (including subsystems, commands, and
+ * trigger mappings) should be declared here.
  */
-public class RobotContainer
-{
+public class RobotContainer {
+
+  private SlewRateLimiter translationLimiter = new SlewRateLimiter(5.0);
+  private SlewRateLimiter strafeLimiter = new SlewRateLimiter(5.0);
+  private SlewRateLimiter rotationLimiter = new SlewRateLimiter(5.0);
 
   private double speedRate = 0.25;
 
-    //to list auto paths
-    // Create a File object for the base directory
+  // to list auto paths
+  // Create a File object for the base directory
   Path currentDir = Paths.get("").toAbsolutePath();
 
   // Go up two directories
@@ -51,30 +59,32 @@ public class RobotContainer
 
   File[] listOfAutos = autosFolder.listFiles();
 
+
   // Replace with CommandPS4Controller or CommandJoystick if needed
   final CommandXboxController operator = new CommandXboxController(0);
   final CommandXboxController driverXbox = new CommandXboxController(1);
   // The robot's subsystems and commands are defined here...
   private final SwerveSubsystem s_swerve = new SwerveSubsystem(new File(Filesystem.getDeployDirectory(),
-                                                                         "swerve/neo"));
+      "swerve/neo"));
   // Applies deadbands and inverts controls because joysticks
   // are back-right positive while robot
   // controls are front-left positive
   // left stick controls translation
-  // right stick controls the rotational velocity 
+  // right stick controls the rotational velocity
   // buttons are quick rotation positions to different ways to face
-  // WARNING: default buttons are on the same buttons as the ones defined in configureBindings
+  // WARNING: default buttons are on the same buttons as the ones defined in
+  // configureBindings
   AbsoluteDriveAdv closedAbsoluteDriveAdv = new AbsoluteDriveAdv(s_swerve,
-                                                                 () -> -MathUtil.applyDeadband(driverXbox.getLeftY(),
-                                                                                               OperatorConstants.LEFT_Y_DEADBAND),
-                                                                 () -> -MathUtil.applyDeadband(driverXbox.getLeftX(),
-                                                                                               OperatorConstants.LEFT_X_DEADBAND),
-                                                                 () -> -MathUtil.applyDeadband(driverXbox.getRightX(),
-                                                                                               OperatorConstants.RIGHT_X_DEADBAND),
-                                                                 driverXbox.getHID()::getYButtonPressed,
-                                                                 driverXbox.getHID()::getAButtonPressed,
-                                                                 driverXbox.getHID()::getXButtonPressed,
-                                                                 driverXbox.getHID()::getBButtonPressed);
+      () -> -MathUtil.applyDeadband(driverXbox.getLeftY(),
+          OperatorConstants.LEFT_Y_DEADBAND),
+      () -> -MathUtil.applyDeadband(driverXbox.getLeftX(),
+          OperatorConstants.LEFT_X_DEADBAND),
+      () -> -MathUtil.applyDeadband(driverXbox.getRightX(),
+          OperatorConstants.RIGHT_X_DEADBAND),
+      driverXbox.getHID()::getYButtonPressed,
+      driverXbox.getHID()::getAButtonPressed,
+      driverXbox.getHID()::getXButtonPressed,
+      driverXbox.getHID()::getBButtonPressed);
 
   // Applies deadbands and inverts controls because joysticks
   // are back-right positive while robot
@@ -82,8 +92,8 @@ public class RobotContainer
   // left stick controls translation
   // right stick controls the desired angle NOT angular rotation
   Command driveFieldOrientedDirectAngle = s_swerve.driveCommand(
-      () -> MathUtil.applyDeadband(driverXbox.getLeftY(), OperatorConstants.LEFT_Y_DEADBAND),
-      () -> MathUtil.applyDeadband(driverXbox.getLeftX(), OperatorConstants.LEFT_X_DEADBAND),
+      () -> speedRate * MathUtil.applyDeadband(driverXbox.getLeftY(), OperatorConstants.LEFT_Y_DEADBAND),
+      () -> speedRate * MathUtil.applyDeadband(driverXbox.getLeftX(), OperatorConstants.LEFT_X_DEADBAND),
       () -> driverXbox.getRightX(),
       () -> driverXbox.getRightY());
 
@@ -102,96 +112,108 @@ public class RobotContainer
       () -> MathUtil.applyDeadband(driverXbox.getLeftX(), OperatorConstants.LEFT_X_DEADBAND),
       () -> driverXbox.getRawAxis(2));
 
-
-
-
-
   SendableChooser<Command> autoChooser = new SendableChooser<>();
   SendableChooser<Integer> SpeedChooser = new SendableChooser<>();
+
+
+
+  private final LedSubsystem s_led = new LedSubsystem(s_swerve);
+
   /**
    * The container for the robot. Contains subsystems, OI devices, and commands.
    */
-  public RobotContainer()
-  {
+  public RobotContainer() {
 
-    //Autonomous Chooser (Searchs auto folder)
+    /*
+    DriverStation.Alliance color;
+    color = DriverStation.getAlliance().get();
+    int isBlueAlliance = DriverStation.Alliance.Blue == color ? 1 : -1;
+    */
+    int isBlueAlliance = 1;
+
+    Command driveFieldOrientedAngularVelocity = s_swerve.driveCommand(
+        () -> isBlueAlliance * speedRate
+            * translationLimiter
+                .calculate(-MathUtil.applyDeadband(driverXbox.getLeftY(), OperatorConstants.LEFT_Y_DEADBAND)),
+        () -> isBlueAlliance * speedRate
+            * strafeLimiter.calculate(-MathUtil.applyDeadband(driverXbox.getLeftX(), OperatorConstants.LEFT_X_DEADBAND)),
+        () -> speedRate * -MathUtil.applyDeadband(driverXbox.getRightX(), OperatorConstants.RIGHT_X_DEADBAND));
+
+    Command driveFieldOrientedDirectAngleSim = s_swerve.simDriveCommand(
+        () -> -MathUtil.applyDeadband(driverXbox.getLeftY(), OperatorConstants.LEFT_Y_DEADBAND),
+        () -> -MathUtil.applyDeadband(driverXbox.getLeftX(), OperatorConstants.LEFT_X_DEADBAND),
+        () -> -driverXbox.getRightX());
+
+
+    // Autonomous Chooser (Searchs auto folder)
     autoChooser.setDefaultOption("do nothing", s_swerve.getAutonomousCommand("do nothing"));
     SmartDashboard.putData(autoChooser);
-    if(listOfAutos!=null){
-      for(int i = 0;i<listOfAutos.length;i++){
-        if(listOfAutos[i].isFile()){
-          String newName = listOfAutos[i].getName().substring(0,listOfAutos[i].getName().length()-5); 
+    if (listOfAutos != null) {
+      for (int i = 0; i < listOfAutos.length; i++) {
+        if (listOfAutos[i].isFile()) {
+          String newName = listOfAutos[i].getName().substring(0, listOfAutos[i].getName().length() - 5);
           autoChooser.addOption(newName, s_swerve.getAutonomousCommand(newName));
         }
       }
     }
 
-
-    //Dashboard Verileri
+    // Dashboard Verileri
     SmartDashboard.putNumber("Swerve Speed Rate", speedRate);
-    SmartDashboard.putBoolean("Is Back",  MuratCont.yesilbas);
-
-    SmartDashboard.putNumber("time", DriverStation.getMatchTime());
+    SmartDashboard.putBoolean("Is Back", MuratCont.yesilbas);
 
     // Configure the trigger bindings
     configureBindings();
+
+    //Genel Setup
+    s_swerve.setDefaultCommand(
+        !RobotBase.isSimulation() ? driveFieldOrientedAngularVelocity : driveFieldOrientedDirectAngleSim);
+
+
+    //Led Setup
+    boolean[] FunctionRank = {
+      DriverStation.isDisabled(),
+      s_swerve.IsSpeakerOk(),
+      MuratCont.yesilbas,
+    };
+    s_led.setDefaultCommand(s_led.LedCommand(FunctionRank));
+
   }
 
-
-
-  //GENERAL KONFIGIRASYON
-
-  
-
-
+  // GENERAL KONFIGIRASYON
 
   /**
-   * Use this method to define your trigger->command mappings. Triggers can be created via the
-   * {@link Trigger#Trigger(java.util.function.BooleanSupplier)} constructor with an arbitrary predicate, or via the
-   * named factories in {@link edu.wpi.first.wpilibj2.command.button.CommandGenericHID}'s subclasses for
-   * {@link CommandXboxController Xbox}/{@link edu.wpi.first.wpilibj2.command.button.CommandPS4Controller PS4}
-   * controllers or {@link edu.wpi.first.wpilibj2.command.button.CommandJoystick Flight joysticks}.
+   * Use this method to define your trigger->command mappings. Triggers can be
+   * created via the
+   * {@link Trigger#Trigger(java.util.function.BooleanSupplier)} constructor with
+   * an arbitrary predicate, or via the
+   * named factories in
+   * {@link edu.wpi.first.wpilibj2.command.button.CommandGenericHID}'s subclasses
+   * for
+   * {@link CommandXboxController
+   * Xbox}/{@link edu.wpi.first.wpilibj2.command.button.CommandPS4Controller PS4}
+   * controllers or {@link edu.wpi.first.wpilibj2.command.button.CommandJoystick
+   * Flight joysticks}.
    */
-  private void configureBindings()
-  {
+  private void configureBindings() {
 
-    //idk what this does
-    s_swerve.setDefaultCommand(
-          !RobotBase.isSimulation() ? driveFieldOrientedDirectAngle : driveFieldOrientedDirectAngleSim);
+    // Gyro Sıfırlama
+    driverXbox.x().onTrue(
+        s_swerve.run((() -> s_swerve.zeroGyro())));
 
+    // Swerve Kitleme
+    driverXbox.b().whileTrue(
+        s_swerve.run((() -> s_swerve.lock())));
 
+    // Speaker YAW (paremeter = tolarance)
+    driverXbox.povUp().whileTrue(s_swerve.aimAtSpeaker(2));
 
-    //Gyro Sıfırlama
-    driverXbox.a().onTrue(
-      s_swerve.run((()->s_swerve.zeroGyro()))
-    );
-    
-    //Swerve Kitleme
-    driverXbox.b().onTrue(
-      s_swerve.run((()->s_swerve.lock()))
-    );
-
-    //Speaker YAW (paremeter = tolarance)
-    driverXbox.y().whileTrue(s_swerve.aimAtSpeaker(2));
-
-    driverXbox.back().onTrue(new RunCommand(()->
-      {
-        MuratCont.yesilbas = true;
-      }
-    )).onFalse(new RunCommand(()->
-      {
-        MuratCont.yesilbas = false;
-      }
-    ));
+    driverXbox.back().whileTrue(new RunCommand(() -> {
+      MuratCont.yesilbas = true;
+    })).whileFalse(new RunCommand(() -> {
+      MuratCont.yesilbas = false;
+    }));
 
 
-    
-
-    if (DriverStation.isTest()){
-      Constants.MAX_SPEED=1;
-    } 
-    else{
-    }
   }
 
   /**
@@ -199,19 +221,16 @@ public class RobotContainer
    *
    * @return the command to run in autonomous
    */
-  public Command getAutonomousCommand()
-  {
+  public Command getAutonomousCommand() {
     // An example command will be run in autonomous
     return autoChooser.getSelected();
   }
 
-  public void setDriveMode()
-  {
+  public void setDriveMode() {
     configureBindings();
   }
 
-  public void setMotorBrake(boolean brake)
-  {
+  public void setMotorBrake(boolean brake) {
     s_swerve.setMotorBrake(brake);
   }
 }

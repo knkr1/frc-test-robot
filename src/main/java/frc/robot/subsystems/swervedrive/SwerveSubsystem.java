@@ -8,6 +8,7 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.function.DoubleSupplier;
 
+import org.opencv.core.Mat;
 import org.photonvision.PhotonCamera;
 import org.photonvision.targeting.PhotonPipelineResult;
 
@@ -253,6 +254,14 @@ public class SwerveSubsystem extends SubsystemBase
                                                            .getYaw()))); // Not sure if this will work, more math may be required.
       }
     });
+  }
+
+  public boolean IsSpeakerOk(){
+    Rotation2d swerveYaw = swerveDrive.getYaw();
+    Rotation2d TagYaw = getSpeakerYaw();
+
+
+    return (Math.abs(swerveYaw.getDegrees() - TagYaw.getDegrees()) <= 10);
   }
 
   /**
