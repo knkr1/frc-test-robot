@@ -139,7 +139,7 @@ public class LedSubsystem extends SubsystemBase{
 
     public Command LedCommand(boolean[] FR){
         return run(()->{
-            for(int i=0;i<=FR.length;i++){
+            for(int i=0;i<FR.length;i++){
                 if(FR[i]==true){
                     RankChooser(i);
                     break;
